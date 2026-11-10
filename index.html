@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kartenordner</title>
+<meta name="theme-color" content="#1f3a5f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#f3f4f7; --card:#fff; --ink:#1b2430; --muted:#5d6878; --line:#d9dde4;
+  --brand:#1f3a5f; --brand-ink:#fff; --accent:#b97d00; --danger:#b3261e; --ok:#1c6b3a;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#12161c; --card:#1c222b; --ink:#e8ecf2; --muted:#9aa5b5; --line:#313a47;
+    --brand:#16283f; --accent:#f0b429; --danger:#ff8a80; --ok:#7bd49a; }
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);
+  display:flex;flex-direction:column}
+header{background:var(--brand);color:var(--brand-ink);padding:12px 16px;padding-top:calc(12px + env(safe-area-inset-top))}
+header h1{margin:0;font-size:1.15rem}
+header p{margin:2px 0 0;font-size:.9rem;opacity:.9}
+main{flex:1;overflow-y:auto;padding:12px 12px 24px;max-width:900px;width:100%;margin:0 auto}
+nav{display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;background:none;color:var(--muted);padding:10px 4px;font:inherit;font-size:.85rem;min-height:52px}
+nav button[aria-current="page"]{color:var(--ink);font-weight:700;box-shadow:inset 0 3px 0 var(--accent)}
+section[hidden]{display:none}
+h2{font-size:1.05rem;margin:16px 0 8px}
+.box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+label{display:block;font-size:.85rem;color:var(--muted);margin:8px 0 3px}
+input,select,textarea{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);
+  border-radius:8px;padding:10px;min-height:44px}
+textarea{min-height:64px}
+button.btn{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;
+  padding:10px 14px;min-height:44px;cursor:pointer}
+button.primary{background:var(--brand);color:#fff;border-color:var(--brand);font-weight:600}
+button.danger{color:var(--danger);border-color:var(--danger)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+.row>*{flex:1;min-width:120px}
+.row>.fit{flex:0 0 auto;min-width:0}
+.muted{color:var(--muted);font-size:.88rem}
+.warn{color:var(--accent);font-size:.9rem}
+.list{list-style:none;margin:0;padding:0}
+.item{display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:8px;margin-bottom:8px;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.item .txt{flex:1;min-width:0}
+.item .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .val{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.thumb{width:46px;height:64px;object-fit:contain;border-radius:4px;background:var(--bg);flex:0 0 auto}
+.thumb.none{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.7rem;border:1px dashed var(--line)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px;text-align:center;font:inherit;
+  color:inherit;cursor:pointer;font-size:.8rem}
+.tile img,.tile .ph{width:100%;aspect-ratio:63/88;object-fit:contain;border-radius:4px;background:var(--bg)}
+.tile .ph{display:flex;align-items:center;justify-content:center;color:var(--muted)}
+dialog{border:0;border-radius:12px;padding:0;width:min(560px,96vw);max-height:92vh;background:var(--card);color:var(--ink)}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+dialog form{padding:14px;overflow-y:auto;max-height:92vh}
+dialog h2{margin-top:0}
+.formhead{display:flex;gap:12px;align-items:flex-start}
+.formhead img{width:96px;border-radius:6px;background:var(--bg)}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.actions .spacer{flex:1}
+.valuebox{background:var(--bg);border-radius:8px;padding:10px;margin-top:10px;font-variant-numeric:tabular-nums}
+#toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;
+  border-radius:20px;font-size:.9rem;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;z-index:10}
+#toast.show{opacity:1}
+.pagehead{font-weight:700;margin:14px 0 6px}
+:focus-visible{outline:3px solid var(--accent);outline-offset:1px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Kartenordner</h1>
+  <p id="summary">–</p>
+</header>
+
+<main>
+  <!-- Sammlung -->
+  <section id="tab-sammlung">
+    <div id="backupHint"></div>
+    <div class="row">
+      <div><label for="fSearch">Suchen</label><input id="fSearch" type="search" placeholder="Name, Set oder Nummer"></div>
+      <div><label for="fBinder">Ordner</label><select id="fBinder"></select></div>
+      <div><label for="fSort">Sortierung</label>
+        <select id="fSort">
+          <option value="added">Neueste zuerst</option>
+          <option value="name">Name</option>
+          <option value="value">Wert (hoch → niedrig)</option>
+          <option value="place">Ablageort</option>
+        </select></div>
+    </div>
+    <p class="muted" id="listInfo"></p>
+    <ul class="list" id="entryList"></ul>
+  </section>
+
+  <!-- Hinzufügen -->
+  <section id="tab-neu" hidden>
+    <div class="box">
+      <label for="sLang">Sprache der Karte</label>
+      <select id="sLang"></select>
+      <h2>Nach Name suchen</h2>
+      <div class="row">
+        <div><label for="sName">Kartenname (in der Sprache der Karte)</label><input id="sName" type="search" placeholder="z. B. Glurak" enterkeyhint="search"></div>
+        <button class="btn primary fit" data-action="searchName">Suchen</button>
+      </div>
+      <h2>Nach Set und Nummer suchen</h2>
+      <div class="row">
+        <div><label for="sSet">Set</label><select id="sSet"><option value="">Sets werden geladen …</option></select></div>
+        <div style="max-width:140px"><label for="sNum">Nummer (optional)</label><input id="sNum" inputmode="text" placeholder="z. B. 25"></div>
+        <button class="btn primary fit" data-action="searchSet">Anzeigen</button>
+      </div>
+      <p class="muted">Die Nummer steht unten auf der Karte, z. B. „025/165“. Es genügt die Zahl vor dem Schrägstrich.</p>
+      <div class="actions"><button class="btn" data-action="manualCard">Karte ohne Datenbank anlegen</button></div>
+    </div>
+    <p class="muted" id="searchInfo"></p>
+    <div class="grid" id="results"></div>
+  </section>
+
+  <!-- Ordner -->
+  <section id="tab-ordner" hidden>
+    <div id="binderView"></div>
+  </section>
+
+  <!-- Mehr -->
+  <section id="tab-mehr" hidden>
+    <div class="box">
+      <h2 style="margin-top:0">Backup</h2>
+      <p class="muted" id="backupInfo"></p>
+      <div class="actions">
+        <button class="btn primary" data-action="exportJson">Backup speichern</button>
+        <button class="btn" data-action="importJson">Backup einlesen</button>
+        <button class="btn" data-action="exportCsv">Tabelle für Excel (CSV)</button>
+      </div>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+      <p class="muted">Die Sammlung liegt nur in diesem Browser auf diesem Gerät. Wird der Browser-Speicher gelöscht oder das Gerät gewechselt, ist sie ohne Backup weg.</p>
+    </div>
+    <div class="box">
+      <h2 style="margin-top:0">Preise</h2>
+      <p class="muted">Richtwerte stammen von Cardmarket (über TCGdex), gelten für gut erhaltene Karten und werden nach Zustand grob abgewertet. Sie sind eine Orientierung, kein Verkaufspreis.</p>
+      <div class="actions"><button class="btn" data-action="refreshPrices">Alle Preise aktualisieren</button></div>
+      <p class="muted" id="priceProgress"></p>
+    </div>
+    <div class="box">
+      <h2 style="margin-top:0">Einstellungen</h2>
+      <label for="setOwner">Name der Sammlung (erscheint im Dateinamen des Backups)</label>
+      <input id="setOwner" placeholder="z. B. Opa">
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button data-tab="sammlung" aria-current="page">Sammlung</button>
+  <button data-tab="neu">Hinzufügen</button>
+  <button data-tab="ordner">Ordner</button>
+  <button data-tab="mehr">Mehr</button>
+</nav>
+
+<dialog id="dlg"></dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+'use strict';
+const API = 'https://api.tcgdex.net/v2';
+// Kürzel, Bezeichnung, grober Abwertungsfaktor gegenüber dem Richtwert (eigene Annahme, keine Marktdaten)
+const CONDITIONS = [
+  ['NM', 'Near Mint – fast wie neu', 1],
+  ['MT', 'Mint – wie neu', 1],
+  ['EX', 'Excellent – leichte Spuren', 0.8],
+  ['GD', 'Good – sichtbare Spuren', 0.65],
+  ['LP', 'Light Played – bespielt', 0.5],
+  ['PL', 'Played – stark bespielt', 0.35],
+  ['PO', 'Poor – beschädigt', 0.2]
+];
+const VARIANTS = { normal: 'Normal', holo: 'Holo', reverse: 'Reverse Holo', firstEdition: '1. Edition' };
+const LANGS = { de: 'Deutsch', en: 'Englisch', ja: 'Japanisch', fr: 'Französisch', it: 'Italienisch', es: 'Spanisch' };
+const EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
+
+let state = { version: 1, entries: [], binders: [], settings: { lang: 'de', owner: '', lastBackup: null } };
+const ui = { tab: 'sammlung', binderOpen: null, form: null, sets: {} };
+const $ = (id) => document.getElementById(id);
+
+/* ---------- Hilfsfunktionen ---------- */
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function uid() {
+  return (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+}
+function today() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function fmtDate(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.slice(0, 10).split('-');
+  return d + '.' + m + '.' + y;
+}
+function num(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseFloat(String(v).replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+let toastTimer;
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+}
+function img(base, quality) { return base ? base + '/' + quality + '.webp' : ''; }
+function normNo(s) { return String(s ?? '').trim().toLowerCase().replace(/^0+(?=.)/, ''); }
+
+/* ---------- Speicher (IndexedDB) ---------- */
+let dbPromise;
+function db() {
+  if (!dbPromise) {
+    dbPromise = new Promise((res, rej) => {
+      const r = indexedDB.open('kartenordner', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('kv');
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  }
+  return dbPromise;
+}
+async function kvGet(key) {
+  const d = await db();
+  return new Promise((res, rej) => {
+    const q = d.transaction('kv').objectStore('kv').get(key);
+    q.onsuccess = () => res(q.result);
+    q.onerror = () => rej(q.error);
+  });
+}
+async function kvSet(key, value) {
+  const d = await db();
+  return new Promise((res, rej) => {
+    const t = d.transaction('kv', 'readwrite');
+    t.objectStore('kv').put(value, key);
+    t.oncomplete = () => res();
+    t.onerror = () => rej(t.error);
+  });
+}
+async function save() {
+  try { await kvSet('state', state); }
+  catch (err) { console.error(err); toast('Speichern fehlgeschlagen – bitte Backup prüfen'); }
+}
+
+/* ---------- Werte ---------- */
+function condFactor(code) { const c = CONDITIONS.find((x) => x[0] === code); return c ? c[2] : 1; }
+function basePrice(e) {
+  const n = e.pn || null, h = e.ph || null;
+  return e.variant === 'reverse' ? (h || n) : (n || h);
+}
+function unitValue(e) {
+  const m = num(e.manual);
+  if (m !== null) return m;
+  const b = basePrice(e);
+  return b ? b * condFactor(e.cond) : null;
+}
+function totalValue(e) { const v = unitValue(e); return v === null ? null : v * (e.qty || 1); }
+function pricesFromCard(card) {
+  const cm = card && card.pricing && card.pricing.cardmarket;
+  if (!cm) return { pn: null, ph: null };
+  return {
+    pn: cm.trend || cm.avg30 || cm.avg || null,
+    ph: cm['trend-holo'] || cm['avg30-holo'] || cm['avg-holo'] || null
+  };
+}
+
+/* ---------- Datenbank-Abfragen (TCGdex) ---------- */
+async function api(path) {
+  const res = await fetch(API + path);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+async function loadSets(lang) {
+  if (ui.sets[lang]) return ui.sets[lang];
+  const key = 'sets-' + lang;
+  const cached = await kvGet(key).catch(() => null);
+  if (cached && Date.now() - cached.t < 7 * 864e5) { ui.sets[lang] = cached.sets; return cached.sets; }
+  try {
+    const raw = await api('/' + lang + '/sets');
+    const sets = raw.map((s) => ({ id: s.id, name: s.name })).reverse(); // neueste zuerst
+    ui.sets[lang] = sets;
+    kvSet(key, { t: Date.now(), sets }).catch(() => {});
+    return sets;
+  } catch (err) {
+    if (cached) { ui.sets[lang] = cached.sets; return cached.sets; }
+    throw err;
+  }
+}
+async function fillSets() {
+  const lang = $('sLang').value, sel = $('sSet');
+  sel.innerHTML = '<option value="">Sets werden geladen …</option>';
+  try {
+    const sets = await loadSets(lang);
+    if ($('sLang').value !== lang) return;
+    sel.innerHTML = '<option value="">Set wählen …</option>' +
+      sets.map((s) => `<option value="${esc(s.id)}">${esc(s.name)} (${esc(s.id)})</option>`).join('');
+  } catch (err) {
+    sel.innerHTML = '<option value="">Sets nicht ladbar (Internet?)</option>';
+  }
+}
+function showResults(cards, lang, info) {
+  const max = 120, shown = cards.slice(0, max);
+  $('searchInfo').textContent = cards.length
+    ? info + (cards.length > max ? ` Es werden die ersten ${max} von ${cards.length} gezeigt – bitte genauer suchen.` : '')
+    : 'Nichts gefunden. Schreibweise und Kartensprache prüfen oder die Karte ohne Datenbank anlegen.';
+  $('results').innerHTML = shown.map((c) => `
+    <button class="tile" data-action="pickCard" data-id="${esc(c.id)}" data-lang="${esc(lang)}">
+      ${c.image ? `<img loading="lazy" alt="" src="${esc(img(c.image, 'low'))}">` : '<div class="ph">kein Bild</div>'}
+      <div><strong>${esc(c.name)}</strong></div>
+      <div class="muted">${esc(c.id)}</div>
+    </button>`).join('');
+}
+async function searchName() {
+  const q = $('sName').value.trim(), lang = $('sLang').value;
+  if (q.length < 2) { toast('Bitte mindestens 2 Zeichen eingeben'); return; }
+  $('searchInfo').textContent = 'Suche läuft …'; $('results').innerHTML = '';
+  try {
+    const cards = await api('/' + lang + '/cards?name=' + encodeURIComponent(q));
+    showResults(cards, lang, cards.length + ' Treffer für „' + q + '“.');
+  } catch (err) { $('searchInfo').textContent = 'Suche fehlgeschlagen. Besteht eine Internetverbindung?'; }
+}
+async function searchSet() {
+  const setId = $('sSet').value, lang = $('sLang').value, no = normNo($('sNum').value);
+  if (!setId) { toast('Bitte ein Set wählen'); return; }
+  $('searchInfo').textContent = 'Set wird geladen …'; $('results').innerHTML = '';
+  try {
+    const set = await api('/' + lang + '/sets/' + encodeURIComponent(setId));
+    let cards = set.cards || [];
+    if (no) cards = cards.filter((c) => normNo(c.localId) === no);
+    showResults(cards, lang, (no ? cards.length + ' Treffer' : cards.length + ' Karten') + ' in „' + set.name + '“.');
+  } catch (err) { $('searchInfo').textContent = 'Set konnte nicht geladen werden. Besteht eine Internetverbindung?'; }
+}
+async function pickCard(id, lang) {
+  toast('Karte wird geladen …');
+  try {
+    const c = await api('/' + lang + '/cards/' + encodeURIComponent(id));
+    const avail = Object.keys(VARIANTS).filter((k) => c.variants && c.variants[k]);
+    openEntryForm({
+      id: uid(), cardId: c.id, lang, name: c.name, setId: c.set && c.set.id, setName: c.set && c.set.name,
+      number: String(c.localId ?? ''), setTotal: c.set && c.set.cardCount && c.set.cardCount.official || null,
+      rarity: c.rarity || '', image: c.image || '', variantsAvail: avail,
+      variant: avail.includes('normal') ? 'normal' : (avail[0] || 'normal'),
+      cond: 'NM', qty: 1, binderId: lastPlace.binderId, page: lastPlace.page, slot: '', note: '',
+      manual: null, added: today(), priceDate: today(), ...pricesFromCard(c)
+    }, true);
+  } catch (err) { toast('Karte konnte nicht geladen werden'); }
+}
+const lastPlace = { binderId: '', page: '' };
+
+/* ---------- Formular für einen Eintrag ---------- */
+function binderName(id) { const b = state.binders.find((x) => x.id === id); return b ? b.name : ''; }
+function placeText(e) {
+  const parts = [];
+  if (e.binderId && binderName(e.binderId)) parts.push(binderName(e.binderId));
+  if (e.page !== '' && e.page != null) parts.push('S. ' + e.page);
+  if (e.slot !== '' && e.slot != null) parts.push('Fach ' + e.slot);
+  return parts.length ? parts.join(' · ') : 'ohne Ablageort';
+}
+function openEntryForm(entry, isNew) {
+  ui.form = { e: { ...entry }, isNew };
+  const e = ui.form.e, manualCard = !e.cardId;
+  let vopts = e.variantsAvail && e.variantsAvail.length ? [...e.variantsAvail] : Object.keys(VARIANTS);
+  if (!vopts.includes(e.variant)) vopts.push(e.variant);
+  const others = state.entries.filter((x) => x.id !== e.id && e.cardId && x.cardId === e.cardId && x.lang === e.lang)
+    .reduce((s, x) => s + (x.qty || 1), 0);
+  $('dlg').innerHTML = `
+  <form method="dialog" id="entryForm">
+    <div class="formhead">
+      ${e.image ? `<img alt="" src="${esc(img(e.image, 'high'))}">` : ''}
+      <div style="flex:1;min-width:0">
+        <h2>${isNew ? 'Karte hinzufügen' : 'Karte bearbeiten'}</h2>
+        ${manualCard ? `
+          <label for="eName">Name</label><input id="eName" required value="${esc(e.name)}">
+          <label for="eSet">Set</label><input id="eSet" value="${esc(e.setName)}">
+          <label for="eNo">Nummer</label><input id="eNo" value="${esc(e.number)}">
+          <label for="eLang">Sprache</label><select id="eLang">${Object.entries(LANGS).map(([k, v]) => `<option value="${k}" ${k === e.lang ? 'selected' : ''}>${v}</option>`).join('')}</select>`
+        : `<div><strong>${esc(e.name)}</strong></div>
+          <div class="muted">${esc(e.setName || '')} · Nr. ${esc(e.number)}${e.setTotal ? '/' + esc(e.setTotal) : ''}</div>
+          <div class="muted">${esc(e.rarity || '')}${e.rarity ? ' · ' : ''}${esc(LANGS[e.lang] || e.lang)}</div>`}
+        ${others ? `<p class="warn">Bereits ${others}× an anderer Stelle in der Sammlung.</p>` : ''}
+      </div>
+    </div>
+    <div class="row">
+      <div><label for="eVariant">Variante</label><select id="eVariant">${vopts.map((k) => `<option value="${k}" ${k === e.variant ? 'selected' : ''}>${VARIANTS[k] || k}</option>`).join('')}</select></div>
+      <div><label for="eCond">Zustand</label><select id="eCond">${CONDITIONS.map((c) => `<option value="${c[0]}" ${c[0] === e.cond ? 'selected' : ''}>${c[1]}</option>`).join('')}</select></div>
+      <div style="max-width:110px"><label for="eQty">Anzahl</label><input id="eQty" type="number" min="1" step="1" inputmode="numeric" value="${esc(e.qty)}"></div>
+    </div>
+    <div class="row">
+      <div><label for="eBinder">Ordner</label><select id="eBinder"><option value="">– kein Ordner –</option>${state.binders.map((b) => `<option value="${b.id}" ${b.id === e.binderId ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></div>
+      <div style="max-width:110px"><label for="ePage">Seite</label><input id="ePage" type="number" min="1" step="1" inputmode="numeric" value="${esc(e.page)}"></div>
+      <div style="max-width:110px"><label for="eSlot">Fach</label><input id="eSlot" type="number" min="1" step="1" inputmode="numeric" value="${esc(e.slot)}"></div>
+    </div>
+    <p class="warn" id="slotHint"></p>
+    ${state.binders.length ? '' : '<p class="muted">Noch kein Ordner angelegt – das geht im Reiter „Ordner“. Die Karte lässt sich später zuweisen.</p>'}
+    <div class="row">
+      <div><label for="eAdded">Erfasst am</label><input id="eAdded" type="date" value="${esc(e.added)}"></div>
+      <div><label for="eManual">Eigener Wert je Karte in € (optional)</label><input id="eManual" inputmode="decimal" placeholder="überschreibt den Richtwert" value="${e.manual != null ? esc(String(e.manual).replace('.', ',')) : ''}"></div>
+    </div>
+    <label for="eNote">Notiz</label><textarea id="eNote">${esc(e.note)}</textarea>
+    <div class="valuebox" id="valueBox"></div>
+    <div class="actions">
+      ${isNew ? '' : '<button type="button" class="btn danger" data-action="deleteEntry">Löschen</button>'}
+      ${!isNew && e.cardId ? '<button type="button" class="btn" data-action="refreshOne">Preis aktualisieren</button>' : ''}
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-action="closeDlg">Abbrechen</button>
+      <button type="submit" class="btn primary">Speichern</button>
+    </div>
+  </form>`;
+  const form = $('entryForm');
+  form.addEventListener('input', readForm);
+  form.addEventListener('submit', (ev) => { ev.preventDefault(); saveEntry(); });
+  readForm();
+  $('dlg').showModal();
+}
+function readForm() {
+  const e = ui.form.e;
+  if (!e.cardId) {
+    e.name = $('eName').value.trim(); e.setName = $('eSet').value.trim();
+    e.number = $('eNo').value.trim(); e.lang = $('eLang').value;
+  }
+  e.variant = $('eVariant').value; e.cond = $('eCond').value;
+  e.qty = Math.max(1, parseInt($('eQty').value, 10) || 1);
+  e.binderId = $('eBinder').value;
+  e.page = $('ePage').value === '' ? '' : Math.max(1, parseInt($('ePage').value, 10) || 1);
+  e.slot = $('eSlot').value === '' ? '' : Math.max(1, parseInt($('eSlot').value, 10) || 1);
+  e.added = $('eAdded').value || today();
+  e.manual = num($('eManual').value);
+  e.note = $('eNote').value.trim();
+
+  const base = basePrice(e), unit = unitValue(e);
+  let html;
+  if (e.manual !== null) html = `Eigener Wert: <strong>${EUR.format(e.manual)}</strong> je Karte`;
+  else if (base) html = `Richtwert Cardmarket: ${EUR.format(base)} × Zustand ${e.cond} (${Math.round(condFactor(e.cond) * 100)} %) = <strong>ca. ${EUR.format(unit)}</strong> je Karte`;
+  else html = 'Kein Richtwert verfügbar. Bei Bedarf einen eigenen Wert eintragen.';
+  if (unit !== null && e.qty > 1) html += `<br>Gesamt für ${e.qty} Stück: <strong>ca. ${EUR.format(unit * e.qty)}</strong>`;
+  if (base && e.manual === null && e.priceDate) html += `<br><span class="muted">Preisstand: ${fmtDate(e.priceDate)}</span>`;
+  $('valueBox').innerHTML = html;
+
+  let hint = '';
+  if (e.binderId && e.page !== '' && e.slot !== '') {
+    const clash = state.entries.find((x) => x.id !== e.id && x.binderId === e.binderId && x.page === e.page && x.slot === e.slot);
+    if (clash) hint = `Hinweis: Dieses Fach ist bereits mit „${clash.name}“ belegt.`;
+    const b = state.binders.find((x) => x.id === e.binderId);
+    if (b && b.pockets && e.slot > b.pockets) hint = `Hinweis: Der Ordner hat laut Einstellung nur ${b.pockets} Fächer je Seite.`;
+  }
+  $('slotHint').textContent = hint;
+}
+async function saveEntry() {
+  readForm();
+  const { e, isNew } = ui.form;
+  if (!e.name) { toast('Bitte einen Namen eintragen'); return; }
+  if (isNew) state.entries.push(e);
+  else { const i = state.entries.findIndex((x) => x.id === e.id); if (i >= 0) state.entries[i] = e; }
+  lastPlace.binderId = e.binderId; lastPlace.page = e.page;
+  await save();
+  $('dlg').close();
+  render();
+  toast(isNew ? '„' + e.name + '“ hinzugefügt' : 'Gespeichert');
+}
+async function deleteEntry() {
+  const e = ui.form.e;
+  if (!confirm('„' + e.name + '“ wirklich aus der Sammlung löschen?')) return;
+  state.entries = state.entries.filter((x) => x.id !== e.id);
+  await save(); $('dlg').close(); render(); toast('Gelöscht');
+}
+async function refreshOne() {
+  const e = ui.form.e;
+  try {
+    const c = await api('/' + e.lang + '/cards/' + encodeURIComponent(e.cardId));
+    Object.assign(e, pricesFromCard(c), { priceDate: today() });
+    readForm(); toast('Preis aktualisiert (noch nicht gespeichert)');
+  } catch (err) { toast('Preis konnte nicht geladen werden'); }
+}
+
+/* ---------- Ordner ---------- */
+function openBinderForm(binder) {
+  const b = binder || { id: uid(), name: '', pockets: 9 };
+  ui.form = { b, isNew: !binder };
+  $('dlg').innerHTML = `
+  <form method="dialog" id="binderForm">
+    <h2>${binder ? 'Ordner bearbeiten' : 'Neuer Ordner'}</h2>
+    <label for="bName">Name</label><input id="bName" required value="${esc(b.name)}" placeholder="z. B. Roter Ordner">
+    <label for="bPockets">Fächer je Seite</label><input id="bPockets" type="number" min="1" max="24" inputmode="numeric" value="${esc(b.pockets || 9)}">
+    <div class="actions">
+      ${binder ? '<button type="button" class="btn danger" data-action="deleteBinder">Ordner löschen</button>' : ''}
+      <span class="spacer"></span>
+      <button type="button" class="btn" data-action="closeDlg">Abbrechen</button>
+      <button type="submit" class="btn primary">Speichern</button>
+    </div>
+  </form>`;
+  $('binderForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    b.name = $('bName').value.trim();
+    b.pockets = Math.max(1, parseInt($('bPockets').value, 10) || 9);
+    if (!b.name) return;
+    if (ui.form.isNew) state.binders.push(b);
+    await save(); $('dlg').close(); render();
+  });
+  $('dlg').showModal();
+}
+async function deleteBinder() {
+  const b = ui.form.b;
+  const n = state.entries.filter((e) => e.binderId === b.id).length;
+  if (!confirm(`Ordner „${b.name}“ löschen?` + (n ? ` ${n} Einträge bleiben erhalten, verlieren aber ihren Ablageort.` : ''))) return;
+  state.entries.forEach((e) => { if (e.binderId === b.id) { e.binderId = ''; e.page = ''; e.slot = ''; } });
+  state.binders = state.binders.filter((x) => x.id !== b.id);
+  ui.binderOpen = null;
+  await save(); $('dlg').close(); render();
+}
+function entryRow(e, showPlace) {
+  const v = totalValue(e);
+  const sub = [e.setName, e.number ? 'Nr. ' + e.number : '', VARIANTS[e.variant] !== 'Normal' ? VARIANTS[e.variant] : '', e.cond].filter(Boolean).join(' · ');
+  return `<li><button class="item" data-action="editEntry" data-id="${esc(e.id)}">
+    ${e.image ? `<img class="thumb" loading="lazy" alt="" src="${esc(img(e.image, 'low'))}">` : '<div class="thumb none">kein Bild</div>'}
+    <div class="txt"><div class="name">${esc(e.name)}${e.qty > 1 ? ' <span class="muted">×' + e.qty + '</span>' : ''}</div>
+      <div class="muted">${esc(sub)}</div>
+      ${showPlace ? `<div class="muted">${esc(placeText(e))}</div>` : ''}</div>
+    <div class="val">${v === null ? '<span class="muted">–</span>' : 'ca. ' + EUR.format(v)}</div>
+  </button></li>`;
+}
+function renderBinders() {
+  const box = $('binderView');
+  const open = state.binders.find((b) => b.id === ui.binderOpen);
+  if (!open) {
+    const loose = state.entries.filter((e) => !e.binderId || !binderName(e.binderId));
+    box.innerHTML = `
+      <div class="actions" style="margin:0 0 12px"><button class="btn primary" data-action="newBinder">Neuer Ordner</button></div>
+      <ul class="list">${state.binders.map((b) => {
+        const es = state.entries.filter((e) => e.binderId === b.id);
+        const cnt = es.reduce((s, e) => s + (e.qty || 1), 0), val = es.reduce((s, e) => s + (totalValue(e) || 0), 0);
+        return `<li><button class="item" data-action="openBinder" data-id="${esc(b.id)}">
+          <div class="txt"><div class="name">${esc(b.name)}</div><div class="muted">${cnt} Karten · ${b.pockets || 9} Fächer je Seite</div></div>
+          <div class="val">ca. ${EUR.format(val)}</div></button></li>`;
+      }).join('')}</ul>
+      ${state.binders.length ? '' : '<p class="muted">Noch kein Ordner angelegt. Lege für jeden physischen Sammelordner einen an.</p>'}
+      ${loose.length ? `<p class="muted">${loose.length} Einträge ohne Ordner – zu finden in der Sammlung mit dem Filter „Ohne Ordner“.</p>` : ''}`;
+    return;
+  }
+  const es = state.entries.filter((e) => e.binderId === open.id);
+  const pages = [...new Set(es.map((e) => (e.page === '' || e.page == null) ? 0 : e.page))].sort((a, b) => (a || 1e9) - (b || 1e9));
+  box.innerHTML = `
+    <div class="actions" style="margin:0 0 12px">
+      <button class="btn" data-action="closeBinder">← Alle Ordner</button>
+      <button class="btn" data-action="editBinder">Bearbeiten</button>
+    </div>
+    <h2>${esc(open.name)}</h2>
+    ${es.length ? '' : '<p class="muted">In diesem Ordner sind noch keine Karten einsortiert.</p>'}
+    ${pages.map((p) => `<div class="pagehead">${p ? 'Seite ' + p : 'Ohne Seitenangabe'}</div>
+      <ul class="list">${es.filter((e) => ((e.page === '' || e.page == null) ? 0 : e.page) === p)
+        .sort((a, b) => (a.slot || 1e9) - (b.slot || 1e9))
+        .map((e) => entryRow({ ...e, setName: (e.slot ? 'Fach ' + e.slot : 'ohne Fach') + (e.setName ? ' · ' + e.setName : '') }, false)).join('')}</ul>`).join('')}`;
+}
+
+/* ---------- Sammlung ---------- */
+function renderCollection() {
+  const q = $('fSearch').value.trim().toLowerCase(), bf = $('fBinder').value, sort = $('fSort').value;
+  let list = state.entries.filter((e) => {
+    if (bf === '-' && e.binderId && binderName(e.binderId)) return false;
+    if (bf && bf !== '-' && e.binderId !== bf) return false;
+    if (!q) return true;
+    return [e.name, e.setName, e.number, e.note, e.cardId].some((f) => String(f || '').toLowerCase().includes(q));
+  });
+  const place = (e) => [binderName(e.binderId) || '￿', String(e.page || 99999).padStart(5, '0'), String(e.slot || 99999).padStart(5, '0')].join('|');
+  if (sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  else if (sort === 'value') list.sort((a, b) => (totalValue(b) || 0) - (totalValue(a) || 0));
+  else if (sort === 'place') list.sort((a, b) => place(a).localeCompare(place(b), 'de'));
+  else list = list.slice().reverse().sort((a, b) => (b.added || '').localeCompare(a.added || ''));
+  const cnt = list.reduce((s, e) => s + (e.qty || 1), 0), val = list.reduce((s, e) => s + (totalValue(e) || 0), 0);
+  $('listInfo').textContent = state.entries.length
+    ? `${list.length} Einträge, ${cnt} Karten, Wert ca. ${EUR.format(val)}`
+    : 'Die Sammlung ist noch leer. Über „Hinzufügen“ kommt die erste Karte hinein.';
+  $('entryList').innerHTML = list.map((e) => entryRow(e, true)).join('');
+
+  const lb = state.settings.lastBackup;
+  const old = !lb || (Date.now() - new Date(lb).getTime()) > 30 * 864e5;
+  $('backupHint').innerHTML = state.entries.length >= 5 && old
+    ? `<div class="box warn">${lb ? 'Das letzte Backup ist vom ' + fmtDate(lb) + '.' : 'Es gibt noch kein Backup.'} Unter „Mehr“ lässt sich eines speichern.</div>` : '';
+}
+function renderFilters() {
+  const sel = $('fBinder'), cur = sel.value;
+  sel.innerHTML = '<option value="">Alle</option>' + state.binders.map((b) => `<option value="${b.id}">${esc(b.name)}</option>`).join('') + '<option value="-">Ohne Ordner</option>';
+  sel.value = [...sel.options].some((o) => o.value === cur) ? cur : '';
+}
+function render() {
+  const cnt = state.entries.reduce((s, e) => s + (e.qty || 1), 0), val = state.entries.reduce((s, e) => s + (totalValue(e) || 0), 0);
+  $('summary').textContent = (state.settings.owner ? state.settings.owner + ' · ' : '') + cnt + ' Karten · Wert ca. ' + EUR.format(val);
+  renderFilters(); renderCollection(); renderBinders();
+  const lb = state.settings.lastBackup;
+  $('backupInfo').textContent = lb ? 'Letztes Backup: ' + fmtDate(lb) : 'Noch kein Backup gespeichert.';
+}
+function showTab(tab) {
+  ui.tab = tab;
+  for (const s of document.querySelectorAll('main > section')) s.hidden = s.id !== 'tab-' + tab;
+  for (const b of document.querySelectorAll('nav button')) {
+    if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  }
+  if (tab === 'neu' && !$('sSet').options[1]) fillSets();
+  document.querySelector('main').scrollTop = 0;
+}
+
+/* ---------- Backup ---------- */
+function download(name, text, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type }));
+  a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+function fileStem() {
+  const o = (state.settings.owner || '').replace(/[^\wäöüÄÖÜß-]+/g, '_');
+  return 'kartenordner' + (o ? '-' + o : '') + '-' + today();
+}
+async function exportJson() {
+  state.settings.lastBackup = new Date().toISOString();
+  await save();
+  download(fileStem() + '.json', JSON.stringify({ app: 'kartenordner', ...state }, null, 1), 'application/json');
+  render(); toast('Backup-Datei erstellt');
+}
+function exportCsv() {
+  const head = ['Name', 'Set', 'Nummer', 'Sprache', 'Variante', 'Zustand', 'Anzahl', 'Ordner', 'Seite', 'Fach', 'Wert je Karte', 'Wert gesamt', 'Erfasst am', 'Notiz', 'Karten-ID'];
+  const de = (n) => n === null ? '' : n.toFixed(2).replace('.', ',');
+  const cell = (v) => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+  const rows = state.entries.map((e) => [e.name, e.setName, e.number, LANGS[e.lang] || e.lang, VARIANTS[e.variant] || e.variant, e.cond, e.qty,
+    binderName(e.binderId), e.page, e.slot, de(unitValue(e)), de(totalValue(e)), fmtDate(e.added), e.note, e.cardId || ''].map(cell).join(';'));
+  download(fileStem() + '.csv', '﻿' + [head.map(cell).join(';'), ...rows].join('\r\n'), 'text/csv;charset=utf-8');
+}
+async function importJson(file) {
+  try {
+    const data = JSON.parse(await file.text());
+    if (!data || !Array.isArray(data.entries) || !Array.isArray(data.binders)) throw new Error('Format');
+    if (state.entries.length && !confirm(`Backup mit ${data.entries.length} Einträgen einlesen? Die aktuelle Sammlung (${state.entries.length} Einträge) wird dabei ersetzt.`)) return;
+    state = { version: 1, entries: data.entries, binders: data.binders, settings: { lang: 'de', owner: '', lastBackup: null, ...(data.settings || {}) } };
+    await save(); applySettings(); render(); toast('Backup eingelesen');
+  } catch (err) { toast('Diese Datei ist kein gültiges Kartenordner-Backup'); }
+}
+async function refreshPrices() {
+  const keys = [...new Set(state.entries.filter((e) => e.cardId).map((e) => e.lang + '|' + e.cardId))];
+  if (!keys.length) { toast('Keine Karten mit Datenbank-Eintrag vorhanden'); return; }
+  let ok = 0, fail = 0;
+  for (let i = 0; i < keys.length; i++) {
+    const [lang, id] = keys[i].split('|');
+    $('priceProgress').textContent = `Aktualisiere ${i + 1} von ${keys.length} …`;
+    try {
+      const p = pricesFromCard(await api('/' + lang + '/cards/' + encodeURIComponent(id)));
+      state.entries.forEach((e) => { if (e.cardId === id && e.lang === lang) Object.assign(e, p, { priceDate: today() }); });
+      ok++;
+    } catch (err) { fail++; }
+    await new Promise((r) => setTimeout(r, 150)); // Rücksicht auf den kostenlosen Dienst
+  }
+  await save(); render();
+  $('priceProgress').textContent = `Fertig: ${ok} aktualisiert` + (fail ? `, ${fail} fehlgeschlagen.` : '.');
+}
+
+/* ---------- Ereignisse ---------- */
+const actions = {
+  searchName, searchSet, exportJson, exportCsv, refreshPrices, deleteEntry, refreshOne, deleteBinder,
+  pickCard: (el) => pickCard(el.dataset.id, el.dataset.lang),
+  manualCard: () => openEntryForm({ id: uid(), cardId: null, lang: $('sLang').value, name: '', setName: '', number: '', image: '',
+    variant: 'normal', cond: 'NM', qty: 1, binderId: lastPlace.binderId, page: lastPlace.page, slot: '', note: '', manual: null, added: today(), pn: null, ph: null }, true),
+  editEntry: (el) => { const e = state.entries.find((x) => x.id === el.dataset.id); if (e) openEntryForm(e, false); },
+  closeDlg: () => $('dlg').close(),
+  newBinder: () => openBinderForm(null),
+  editBinder: () => openBinderForm(state.binders.find((b) => b.id === ui.binderOpen)),
+  openBinder: (el) => { ui.binderOpen = el.dataset.id; renderBinders(); },
+  closeBinder: () => { ui.binderOpen = null; renderBinders(); },
+  importJson: () => $('importFile').click()
+};
+document.addEventListener('click', (ev) => {
+  const tabBtn = ev.target.closest('nav button[data-tab]');
+  if (tabBtn) { showTab(tabBtn.dataset.tab); return; }
+  const el = ev.target.closest('[data-action]');
+  if (el && actions[el.dataset.action]) actions[el.dataset.action](el);
+});
+document.addEventListener('error', (ev) => {
+  if (ev.target.tagName === 'IMG') ev.target.style.visibility = 'hidden';
+}, true);
+$('fSearch').addEventListener('input', renderCollection);
+$('fBinder').addEventListener('change', renderCollection);
+$('fSort').addEventListener('change', renderCollection);
+$('sName').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') searchName(); });
+$('sNum').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') searchSet(); });
+$('sLang').addEventListener('change', async () => { state.settings.lang = $('sLang').value; await save(); fillSets(); });
+$('setOwner').addEventListener('change', async () => { state.settings.owner = $('setOwner').value.trim(); await save(); render(); });
+$('importFile').addEventListener('change', (ev) => { const f = ev.target.files[0]; ev.target.value = ''; if (f) importJson(f); });
+
+function applySettings() {
+  $('sLang').innerHTML = Object.entries(LANGS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+  $('sLang').value = LANGS[state.settings.lang] ? state.settings.lang : 'de';
+  $('setOwner').value = state.settings.owner || '';
+}
+(async function init() {
+  try {
+    const stored = await kvGet('state');
+    if (stored && Array.isArray(stored.entries)) state = { ...state, ...stored, settings: { ...state.settings, ...(stored.settings || {}) } };
+  } catch (err) { console.error(err); toast('Gespeicherte Sammlung konnte nicht gelesen werden'); }
+  applySettings(); render();
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
