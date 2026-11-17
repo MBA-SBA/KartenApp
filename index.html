@@ -121,7 +121,7 @@ dialog h2{margin-top:0}
         <div style="max-width:140px"><label for="sNum">Nummer (optional)</label><input id="sNum" inputmode="text" placeholder="z. B. 25"></div>
         <button class="btn primary fit" data-action="searchSet">Anzeigen</button>
       </div>
-      <p class="muted">Die Nummer steht unten auf der Karte, z. B. „025/165“. Eingabe mit oder ohne Schrägstrich.</p>
+      <p class="muted">Die Nummer steht unten auf der Karte, z. B. „025/165“. Eingabe mit oder ohne Schrägstrich. Ausnahme: Nachdrucke wie die „Klassische Sammlung“ führt die Datenbank unter eigenen Nummern; dort am besten nach Name suchen und auf den Set-Namen achten.</p>
       <div class="actions"><button class="btn" data-action="manualCard">Karte ohne Datenbank anlegen</button></div>
     </div>
     <p class="muted" id="searchInfo"></p>
@@ -321,16 +321,26 @@ async function fillSets() {
     sel.innerHTML = '<option value="">Sets nicht ladbar (Internet?)</option>';
   }
 }
-function showResults(cards, lang, info) {
+// Set-ID aus der Karten-ID: "30th-c-029" → "30th-c"
+function setIdOf(c) { const i = c.id.lastIndexOf('-'); return i > 0 ? c.id.slice(0, i) : c.id; }
+async function showResults(cards, lang, info) {
+  // Set-Namen und Reihenfolge (neueste Sets zuerst) aus der Set-Liste
+  const sets = await loadSets(lang).catch(() => []);
+  const pos = new Map(sets.map((s, i) => [s.id, i]));
+  const setName = (c) => { const s = sets[pos.get(setIdOf(c))]; return s ? s.name : setIdOf(c); };
+  const numOf = (c) => { const n = parseInt(c.localId, 10); return Number.isFinite(n) ? n : 1e9; };
+  cards = cards.slice().sort((a, b) =>
+    (pos.get(setIdOf(a)) ?? 1e9) - (pos.get(setIdOf(b)) ?? 1e9) || numOf(a) - numOf(b));
   const max = 120, shown = cards.slice(0, max);
   $('searchInfo').textContent = cards.length
-    ? info + (cards.length > max ? ` Es werden die ersten ${max} von ${cards.length} gezeigt – bitte genauer suchen.` : '')
+    ? info + ' Neueste Sets zuerst.' + (cards.length > max ? ` Es werden die ersten ${max} von ${cards.length} gezeigt – bitte genauer suchen.` : '')
     : 'Nichts gefunden. Schreibweise und Kartensprache prüfen oder die Karte ohne Datenbank anlegen.';
   $('results').innerHTML = shown.map((c) => `
     <button class="tile" data-action="pickCard" data-id="${esc(c.id)}" data-lang="${esc(lang)}">
-      ${c.image ? `<img loading="lazy" alt="" src="${esc(img(c.image, 'low'))}">` : '<div class="ph">kein Bild</div>'}
+      ${c.image ? `<img loading="lazy" alt="" src="${esc(img(c.image, 'low'))}">` : `<div class="ph">kein Bild<br>in der Datenbank</div>`}
       <div><strong>${esc(c.name)}</strong></div>
-      <div class="muted">Nr. ${esc(c.localId ?? '')} · ${esc(c.id)}</div>
+      <div>${esc(setName(c))}</div>
+      <div class="muted">Nr. ${esc(c.localId ?? '')}</div>
     </button>`).join('');
 }
 async function searchName() {
