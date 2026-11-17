@@ -1,7 +1,7 @@
 // Service Worker: macht die App installierbar und offline startbar.
 // Programmdateien: erst Netz, sonst Zwischenspeicher (so kommen Updates an).
 // Kartenbilder: erst Zwischenspeicher, sonst Netz.
-const SHELL = 'kartenordner-shell-v1';
+const SHELL = 'kartenordner-shell-v3';
 const IMAGES = 'kartenordner-bilder-v1';
 const FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 

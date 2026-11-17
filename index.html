@@ -69,6 +69,14 @@ dialog h2{margin-top:0}
   border-radius:20px;font-size:.9rem;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw;z-index:10}
 #toast.show{opacity:1}
 .pagehead{font-weight:700;margin:14px 0 6px}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;margin-top:6px}
+.bar>span{display:block;height:100%;background:var(--ok)}
+.tile{position:relative}
+.tile.missing{border-style:dashed}
+.tile.missing img,.tile.missing .ph{filter:grayscale(1);opacity:.35}
+.tile .badge{position:absolute;top:4px;right:4px;background:var(--ok);color:#fff;border-radius:10px;padding:1px 7px;font-size:.75rem;font-weight:700}
+.check{display:flex;gap:8px;align-items:center;margin:8px 0;font-size:.95rem;color:var(--ink)}
+.check input{width:auto;min-height:0}
 :focus-visible{outline:3px solid var(--accent);outline-offset:1px}
 </style>
 </head>
@@ -113,7 +121,7 @@ dialog h2{margin-top:0}
         <div style="max-width:140px"><label for="sNum">Nummer (optional)</label><input id="sNum" inputmode="text" placeholder="z. B. 25"></div>
         <button class="btn primary fit" data-action="searchSet">Anzeigen</button>
       </div>
-      <p class="muted">Die Nummer steht unten auf der Karte, z. B. „025/165“. Es genügt die Zahl vor dem Schrägstrich.</p>
+      <p class="muted">Die Nummer steht unten auf der Karte, z. B. „025/165“. Eingabe mit oder ohne Schrägstrich.</p>
       <div class="actions"><button class="btn" data-action="manualCard">Karte ohne Datenbank anlegen</button></div>
     </div>
     <p class="muted" id="searchInfo"></p>
@@ -121,6 +129,11 @@ dialog h2{margin-top:0}
   </section>
 
   <!-- Ordner -->
+  <!-- Sets -->
+  <section id="tab-sets" hidden>
+    <div id="setView"></div>
+  </section>
+
   <section id="tab-ordner" hidden>
     <div id="binderView"></div>
   </section>
@@ -155,6 +168,7 @@ dialog h2{margin-top:0}
 <nav>
   <button data-tab="sammlung" aria-current="page">Sammlung</button>
   <button data-tab="neu">Hinzufügen</button>
+  <button data-tab="sets">Sets</button>
   <button data-tab="ordner">Ordner</button>
   <button data-tab="mehr">Mehr</button>
 </nav>
@@ -180,7 +194,7 @@ const LANGS = { de: 'Deutsch', en: 'Englisch', ja: 'Japanisch', fr: 'Französisc
 const EUR = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
 
 let state = { version: 1, entries: [], binders: [], settings: { lang: 'de', owner: '', lastBackup: null } };
-const ui = { tab: 'sammlung', binderOpen: null, form: null, sets: {} };
+const ui = { tab: 'sammlung', binderOpen: null, form: null, sets: {}, setOpen: null, setCards: {}, onlyMissing: false };
 const $ = (id) => document.getElementById(id);
 
 /* ---------- Hilfsfunktionen ---------- */
@@ -213,7 +227,8 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
 }
 function img(base, quality) { return base ? base + '/' + quality + '.webp' : ''; }
-function normNo(s) { return String(s ?? '').trim().toLowerCase().replace(/^0+(?=.)/, ''); }
+// "025/165" → "25": nur die Zahl vor dem Schrägstrich, ohne führende Nullen
+function normNo(s) { return String(s ?? '').split('/')[0].trim().toLowerCase().replace(/^0+(?=.)/, ''); }
 
 /* ---------- Speicher (IndexedDB) ---------- */
 let dbPromise;
@@ -315,7 +330,7 @@ function showResults(cards, lang, info) {
     <button class="tile" data-action="pickCard" data-id="${esc(c.id)}" data-lang="${esc(lang)}">
       ${c.image ? `<img loading="lazy" alt="" src="${esc(img(c.image, 'low'))}">` : '<div class="ph">kein Bild</div>'}
       <div><strong>${esc(c.name)}</strong></div>
-      <div class="muted">${esc(c.id)}</div>
+      <div class="muted">Nr. ${esc(c.localId ?? '')} · ${esc(c.id)}</div>
     </button>`).join('');
 }
 async function searchName() {
@@ -333,9 +348,18 @@ async function searchSet() {
   $('searchInfo').textContent = 'Set wird geladen …'; $('results').innerHTML = '';
   try {
     const set = await api('/' + lang + '/sets/' + encodeURIComponent(setId));
-    let cards = set.cards || [];
-    if (no) cards = cards.filter((c) => normNo(c.localId) === no);
-    showResults(cards, lang, (no ? cards.length + ' Treffer' : cards.length + ' Karten') + ' in „' + set.name + '“.');
+    const all = set.cards || [];
+    let cards = all, info = all.length + ' Karten in „' + set.name + '“.';
+    if (no) {
+      cards = all.filter((c) => normNo(c.localId) === no);
+      info = cards.length + ' Treffer in „' + set.name + '“.';
+      if (!cards.length && all.length) {
+        // Manche Sets (z. B. Classic Collection) sind in der Datenbank anders nummeriert als auf der Karte
+        cards = all;
+        info = 'Nummer ' + no + ' gibt es in „' + set.name + '“ in der Datenbank nicht. In manchen Sets ist die Datenbank anders nummeriert als die Karte. Hier alle ' + all.length + ' Karten des Sets zur Auswahl.';
+      }
+    }
+    showResults(cards, lang, info);
   } catch (err) { $('searchInfo').textContent = 'Set konnte nicht geladen werden. Besteht eine Internetverbindung?'; }
 }
 async function pickCard(id, lang) {
@@ -559,6 +583,110 @@ function renderBinders() {
         .map((e) => entryRow({ ...e, setName: (e.slot ? 'Fach ' + e.slot : 'ohne Fach') + (e.setName ? ' · ' + e.setName : '') }, false)).join('')}</ul>`).join('')}`;
 }
 
+/* ---------- Sets: Fortschritt und fehlende Karten ---------- */
+function ownedSets() {
+  const groups = new Map();
+  for (const e of state.entries) {
+    if (!e.cardId || !e.setId) continue;
+    const key = e.lang + '|' + e.setId;
+    if (!groups.has(key)) groups.set(key, { key, lang: e.lang, setId: e.setId, setName: e.setName || e.setId, official: e.setTotal || null, cards: new Map(), value: 0 });
+    const g = groups.get(key);
+    if (!g.official && e.setTotal) g.official = e.setTotal;
+    const c = g.cards.get(e.cardId) || { qty: 0, entryId: e.id };
+    c.qty += e.qty || 1;
+    g.cards.set(e.cardId, c);
+    g.value += totalValue(e) || 0;
+  }
+  return [...groups.values()].sort((a, b) => a.setName.localeCompare(b.setName, 'de'));
+}
+async function loadSetCards(lang, setId) {
+  const key = lang + '|' + setId;
+  if (ui.setCards[key]) return ui.setCards[key];
+  const dbKey = 'setcards-' + key, cached = await kvGet(dbKey).catch(() => null);
+  if (cached && Date.now() - cached.t < 3 * 864e5) { ui.setCards[key] = cached.data; return cached.data; }
+  try {
+    const s = await api('/' + lang + '/sets/' + encodeURIComponent(setId));
+    const data = {
+      name: s.name, official: (s.cardCount && s.cardCount.official) || null,
+      cards: (s.cards || []).map((c) => ({ id: c.id, localId: String(c.localId ?? ''), name: c.name, image: c.image || '' }))
+    };
+    ui.setCards[key] = data;
+    kvSet(dbKey, { t: Date.now(), data }).catch(() => {});
+    return data;
+  } catch (err) {
+    if (cached) { ui.setCards[key] = cached.data; return cached.data; }
+    throw err;
+  }
+}
+// [1,2,3,5,7,8] → "1–3, 5, 7–8"
+function ranges(nums) {
+  const out = [];
+  for (let i = 0; i < nums.length; i++) {
+    let j = i;
+    while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++;
+    out.push(j > i ? nums[i] + '–' + nums[j] : String(nums[i]));
+    i = j;
+  }
+  return out.join(', ');
+}
+function renderSets() {
+  const box = $('setView'), groups = ownedSets();
+  const open = groups.find((g) => g.key === ui.setOpen);
+  if (!open) {
+    box.innerHTML = groups.length ? `
+      <p class="muted">Sets, aus denen mindestens eine Karte in der Sammlung ist. Antippen zeigt vorhandene und fehlende Karten.</p>
+      <ul class="list">${groups.map((g) => {
+        const have = g.cards.size, pct = g.official ? Math.min(100, Math.round(have / g.official * 100)) : null;
+        return `<li><button class="item" data-action="openSet" data-key="${esc(g.key)}">
+          <div class="txt"><div class="name">${esc(g.setName)}${g.lang !== 'de' ? ' <span class="muted">(' + esc(LANGS[g.lang] || g.lang) + ')</span>' : ''}</div>
+            <div class="muted">${have} ${g.official ? 'von ' + g.official + ' ' : ''}verschiedene Karten${pct !== null ? ' · ' + pct + ' %' : ''}</div>
+            ${pct !== null ? `<div class="bar"><span style="width:${pct}%"></span></div>` : ''}</div>
+          <div class="val">ca. ${EUR.format(g.value)}</div></button></li>`;
+      }).join('')}</ul>`
+      : '<p class="muted">Noch keine Karten aus der Datenbank in der Sammlung. Von Hand angelegte Karten erscheinen hier nicht, weil ihr Set unbekannt ist.</p>';
+    return;
+  }
+  const key = open.key;
+  box.innerHTML = `
+    <div class="actions" style="margin:0 0 12px"><button class="btn" data-action="closeSet">← Alle Sets</button></div>
+    <h2>${esc(open.setName)}</h2><p class="muted" id="setStatus">Kartenliste wird geladen …</p>
+    <div id="setBody"></div>`;
+  loadSetCards(open.lang, open.setId).then((data) => {
+    if (ui.setOpen !== key || ui.tab !== 'sets') return;
+    const official = data.official || open.official;
+    const n = (c) => parseInt(c.localId, 10);
+    const isMain = (c) => official && /^\d+$/.test(c.localId) && n(c) >= 1 && n(c) <= official;
+    const main = data.cards.filter(isMain), extra = data.cards.filter((c) => !isMain(c));
+    const has = (c) => open.cards.has(c.id);
+    const missingNums = main.filter((c) => !has(c)).map(n).sort((a, b) => a - b);
+    const haveMain = main.filter(has).length, haveExtra = extra.filter(has).length;
+    const unknown = [...open.cards.keys()].filter((id) => !data.cards.some((c) => c.id === id)).length;
+
+    let status = main.length
+      ? `Hauptset: ${haveMain} von ${main.length}` + (extra.length ? ` · Sonderkarten: ${haveExtra} von ${extra.length}` : '')
+      : `${haveMain + haveExtra} von ${data.cards.length} Karten`;
+    if (unknown) status += ` · ${unknown} Karte(n) aus der Sammlung stehen nicht in der Kartenliste der Datenbank`;
+    $('setStatus').textContent = status;
+
+    const shown = ui.onlyMissing ? data.cards.filter((c) => !has(c)) : data.cards;
+    $('setBody').innerHTML = `
+      ${main.length ? `<div class="box"><strong>Fehlende Nummern im Hauptset:</strong> ${missingNums.length ? esc(ranges(missingNums)) : 'keine – vollständig!'}
+        <div class="muted">Nummern nach Datenbank. Bei manchen Sets weicht sie von der aufgedruckten Nummer ab.</div></div>` : ''}
+      <label class="check"><input type="checkbox" id="onlyMissing" ${ui.onlyMissing ? 'checked' : ''}> Nur fehlende Karten zeigen</label>
+      <p class="muted">Farbige Karten sind vorhanden, graue fehlen noch. Eine fehlende Karte antippen, um sie hinzuzufügen.</p>
+      <div class="grid">${shown.map((c) => {
+        const own = open.cards.get(c.id);
+        return `<button class="tile ${own ? 'owned' : 'missing'}" ${own ? `data-action="editEntry" data-id="${esc(own.entryId)}"` : `data-action="pickCard" data-id="${esc(c.id)}" data-lang="${esc(open.lang)}"`}>
+          ${own ? `<span class="badge">×${own.qty}</span>` : ''}
+          ${c.image ? `<img loading="lazy" alt="" src="${esc(img(c.image, 'low'))}">` : '<div class="ph">kein Bild</div>'}
+          <div><strong>${esc(c.name)}</strong></div><div class="muted">Nr. ${esc(c.localId)}</div></button>`;
+      }).join('')}</div>`;
+    $('onlyMissing').addEventListener('change', (ev) => { ui.onlyMissing = ev.target.checked; renderSets(); });
+  }).catch(() => {
+    if (ui.setOpen === key) $('setStatus').textContent = 'Die Kartenliste dieses Sets konnte nicht geladen werden. Besteht eine Internetverbindung?';
+  });
+}
+
 /* ---------- Sammlung ---------- */
 function renderCollection() {
   const q = $('fSearch').value.trim().toLowerCase(), bf = $('fBinder').value, sort = $('fSort').value;
@@ -593,6 +721,7 @@ function render() {
   const cnt = state.entries.reduce((s, e) => s + (e.qty || 1), 0), val = state.entries.reduce((s, e) => s + (totalValue(e) || 0), 0);
   $('summary').textContent = (state.settings.owner ? state.settings.owner + ' · ' : '') + cnt + ' Karten · Wert ca. ' + EUR.format(val);
   renderFilters(); renderCollection(); renderBinders();
+  if (ui.tab === 'sets') renderSets();
   const lb = state.settings.lastBackup;
   $('backupInfo').textContent = lb ? 'Letztes Backup: ' + fmtDate(lb) : 'Noch kein Backup gespeichert.';
 }
@@ -603,6 +732,7 @@ function showTab(tab) {
     if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   }
   if (tab === 'neu' && !$('sSet').options[1]) fillSets();
+  if (tab === 'sets') renderSets();
   document.querySelector('main').scrollTop = 0;
 }
 
@@ -670,6 +800,8 @@ const actions = {
   editBinder: () => openBinderForm(state.binders.find((b) => b.id === ui.binderOpen)),
   openBinder: (el) => { ui.binderOpen = el.dataset.id; renderBinders(); },
   closeBinder: () => { ui.binderOpen = null; renderBinders(); },
+  openSet: (el) => { ui.setOpen = el.dataset.key; renderSets(); document.querySelector('main').scrollTop = 0; },
+  closeSet: () => { ui.setOpen = null; renderSets(); },
   importJson: () => $('importFile').click()
 };
 document.addEventListener('click', (ev) => {
